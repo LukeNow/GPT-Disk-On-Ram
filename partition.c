@@ -1,7 +1,10 @@
 #include <linux/types.h>
+#include <linux/crc32.h>
+
+#define CRC_32_SEED 0xffffffff
 
 #define DISK_SIZE 0x100000
-#define LAST_USABLE_BLK DISK_SIZE-LBA_LEN 
+#define LAST_USABLE_BLK DISK_SIZE - (34 * LBA_LEN)
 
 #define MBR_ENTRY_LEN 16
 #define LBA_LEN 512
@@ -9,7 +12,16 @@
 #define MBR_ZERO_OFF 446
 #define MBR_ENTRY_OFF 462
 #define MBR_SIG_OFF 510
+#define MBR_TABLE_LEN 512
 #define MBR_SIG_LEN 2
+
+#define GPT_TBL_OFF 512
+#define GPT_FIRST_ENTRY_OFF 1024
+#define GPT_ENTRY_LEN 0x80
+
+#define START_PART_OFF (34 * LBA_LEN)
+
+
 
 typedef struct {
 	char	BootIndicator;
@@ -54,26 +66,69 @@ static const mbr_table_entry prot_mbr_entry =
 	BootIndicator: 0x00,
 	StartingCHS: 0x000200,
 	OSType: 0xEE,
-	EndingCHS: LAST_USABLE_BLK,
-	StartingLBA: 0x01,
-	SizeInLBA: //TODO
+	EndingCHS: LAST_USABLE_BLK, //TODO: FIx
+	StartingLBA: 0x01, 
+	SizeInLBA: 0x07CF //Total LBA size - 1
 
 };
 
+static const gpt_table_entry gpt_entry = {
+	TypeGUID1: 0xC12A7328F81F11D2,
+	TypeGUID2: 0xBA4B00A0C93EC93B,
+	UniqueGUID1: 0x1000000000000000,
+	UniqueGUID2: 0x1000000000000000,
+	StartingLBA: 0x20,
+	EndingLBA: 0x03C6, 
+	Attributes: 0x00,
+	TypeName: "Test"
+}
+
+
+
+static gpt_table_header gpt_header = {
+	Signature: "EFI PART",
+	Revision: 0x00010000,
+	HeaderSize: 0x5D,
+	HeaderCRC32: 0x00, //TO be calculated second
+	Reserved: 0x00,
+	PrimaryLBA: 0x01,
+	BackupLBA: 0x07CF, //CHECK
+	FirstUsableLBA: 0x20,
+	LastUsableLBA: 0x03C6, //966 
+	UniqueGUID1: 0x1000000000000000,
+	UniqueGUID2: 0x1000000000000000,
+	FirstEntryLBA: 0x02,
+	SizeOfEntry: 0x80,
+	EntriesCRC32: 0x00 //TO be calculated first
+}
 
 
 static void write_prot_mbr(u8 *disk) {
-	memset(disk, 0x0, MBR_ZERO_OFF); //Set rest to zero
+	memset(disk, 0x0, MBR_ZERO_OFF); //Set first part of MBR to zero
 	memset(disk + MBR_ZERO_OFF, &prot_mbr_entry, 
 	       MBR_ENTRY_LEN); //Fill one valid entry
 	memset(disk + MBR_ENTRY_OFF, 0x00, 
 	       MBR_ENTRY_LEN * 3); //Zero fill 3 entries
-	memset(disk + MBR_SIG_OFF, 0x00, 
-	       MBR_SIG_LEN); //write signature       
+	memset(disk + MBR_SIG_OFF, 0xAA55, 
+	       MBR_SIG_LEN); //write signature 
+	//memset(disk + MBR_TABLE_LEN, 0x00, 
+	       //LBA_LEN - MBR_TABLE_LEN); //Zero fill rest of MBR to fit LBA len
 }
 
 static void write_gpt(u8 *disk) {
-
+	u32 crc = crc32(CRC_32_SEED , &gpt_entry, sizeof(gpt_table_entry)) 
+		^ CRC_32_SEED; // Xor at the end with 0xFF--
+	gpt_header->EntriesCRC32 = crc;
+	
+	crc = crc32(CRC_32_SEED, &gpt_header, sizeof(gpt_table_header))
+		^ CRC_32_SEED;
+	gpt_header->HeaderCRC32;
+	
+	prink(KERN_INFO "The GPT_Table len is %s\n", gpt_header->HeaderSize);
+	
+	/*WRITE FIRST MAIN GPT HEADER */
+	
+	
 }
 
 void write_headers(u8 *disk){
