@@ -1,26 +1,38 @@
 #include <linux/types.h>
 #include <linux/crc32.h>
 
+#include "partition.h"
+
 #define CRC_32_SEED 0xffffffff
 
 #define DISK_SIZE 0x100000
 #define LAST_USABLE_BLK DISK_SIZE - (34 * LBA_LEN)
+#define NUM_OF_LBA (DISK_SIZE / LBA_LEN)
 
+#define GPT_ENTRY_LEN 0x80
+#define GPT_TBL_LEN 92
+#define MBR_SIG_LEN 2
+#define MBR_TABLE_LEN 512
 #define MBR_ENTRY_LEN 16
 #define LBA_LEN 512
+#define GPT_FIRST_ENTRY_OFF (LBA_LEN * 2)
 
 #define MBR_ZERO_OFF 446
 #define MBR_ENTRY_OFF 462
 #define MBR_SIG_OFF 510
-#define MBR_TABLE_LEN 512
-#define MBR_SIG_LEN 2
 
-#define GPT_TBL_OFF 512
-#define GPT_FIRST_ENTRY_OFF 1024
-#define GPT_ENTRY_LEN 0x80
+#define GPT_TBL_OFF LBA_LEN
+#define GPT_TBL_ZERO_OFF (GPT_TBL_OFF + GPT_TBL_LEN)
+#define GPT_TBL_ZERO_LEN (GPT_FIRST_ENTRY_OFF - GPT_TBL_ZERO_OFF)
 
+#define GPT_ENTRY_ZERO_OFF (GPT_FIRST_ENTRY_OFF + GPT_ENTRY_LEN)
+#define GPT_ENTRY_ZERO_LEN (START_PART_OFF - GPT_ENTRY_ZERO_OFF)
 #define START_PART_OFF (34 * LBA_LEN)
 
+#define GPT_BACKUP_ENTRY_OFF (DISK_SIZE - (NUM_OF_LBA - 34) * LBA_LEN)
+#define GPT_BACKUP_ENTRY_ZERO_OFF (GPT_BACKUP_ENTRY_OFF + GPT_ENTRY_LEN)
+#define GPT_BACKUP_HEADER_OFF ((NUM_OF_LBA - 1) * lBA_LEN)
+#define GPT_BACKUP_HEADER_ZERO_OFF (GPT_BACKUP_HEADER_OFF + GPT_TBL_LEN)
 
 
 typedef struct {
@@ -109,10 +121,12 @@ static void write_prot_mbr(u8 *disk) {
 	       MBR_ENTRY_LEN); //Fill one valid entry
 	memset(disk + MBR_ENTRY_OFF, 0x00, 
 	       MBR_ENTRY_LEN * 3); //Zero fill 3 entries
-	memset(disk + MBR_SIG_OFF, 0xAA55, 
-	       MBR_SIG_LEN); //write signature 
+	
+	*(unsigned short *)(disk + MBR_SIG_OFF) = 0xAA55;
 	//memset(disk + MBR_TABLE_LEN, 0x00, 
 	       //LBA_LEN - MBR_TABLE_LEN); //Zero fill rest of MBR to fit LBA len
+
+	prink(KERN_INFO "MBR header written\n");
 }
 
 static void write_gpt(u8 *disk) {
@@ -127,10 +141,23 @@ static void write_gpt(u8 *disk) {
 	prink(KERN_INFO "The GPT_Table len is %s\n", gpt_header->HeaderSize);
 	
 	/*WRITE FIRST MAIN GPT HEADER */
-	
-	
+	memset(disk + GPT_TBL_OFF, &gpt_header, GPT_TBL_LEN); //write first gpt header
+	memset(disk + GPT_TBL_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
+
+	memset(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memset(disk + GPT_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
+
+	/*WRITE BACKUP GPT HEADER */
+	memset(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memset(disk + GPT_BACKUP_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
+
+	memset(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, GPT_TBL_LEN);
+	memset(disk + GPT_BACKUP_HEADER_ZERO_FF, 0x00, GPT_TBL_ZERO_LEN);
+
+	prink(KERN_INFO "GPT headers written\n");
 }
 
 void write_headers(u8 *disk){
-
+	write_prot_mbr(disk);
+	write_gpt(disk);
 }
