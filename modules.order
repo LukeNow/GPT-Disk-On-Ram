@@ -1,0 +1,3 @@
+kernel//home/luke/workspace/GPT-Disk-On-Ram/test_dev.ko
+kernel//home/luke/workspace/GPT-Disk-On-Ram/ram_dev.ko
+kernel//home/luke/workspace/GPT-Disk-On-Ram/partition.ko

@@ -1,7 +1,7 @@
 #include <linux/vmalloc.h> 
 #include <linux/types.h>
 
-#include "parition.h"
+#include "partition.h"
 #include "ram_dev.h"
 
 #define DISK_SIZE 0x100000
@@ -31,7 +31,7 @@ void ramdev_write(sector_t off, u8 *buffer, unsigned int blocks)
 	       blocks * BLOCK_SIZE);
 }
 
-void ramdev_write(sector_t off, u8 *buffer, unsigned int blocks)
+void ramdev_read(sector_t off, u8 *buffer, unsigned int blocks)
 {
 	memcpy(buffer, disk + (off * BLOCK_SIZE), 
 	       blocks * BLOCK_SIZE);

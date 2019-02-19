@@ -1,5 +1,7 @@
+#include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/crc32.h>
+#include <linux/string.h>
 
 #include "partition.h"
 
@@ -76,9 +78,9 @@ typedef struct {
 static const mbr_table_entry prot_mbr_entry = 
 {
 	BootIndicator: 0x00,
-	StartingCHS: 0x000200,
+	StartingCHS: { 0x00, 0x02, 0x00 } ,
 	OSType: 0xEE,
-	EndingCHS: LAST_USABLE_BLK, //TODO: FIx
+	EndingCHS: { 0xFE, 0xFF, 0xFF }, //TODO
 	StartingLBA: 0x01, 
 	SizeInLBA: 0x07CF //Total LBA size - 1
 
@@ -117,7 +119,7 @@ static gpt_table_header gpt_header = {
 
 static void write_prot_mbr(u8 *disk) {
 	memset(disk, 0x0, MBR_ZERO_OFF); //Set first part of MBR to zero
-	memset(disk + MBR_ZERO_OFF, &prot_mbr_entry, 
+	memcpy(disk + MBR_ZERO_OFF, &prot_mbr_entry, 
 	       MBR_ENTRY_LEN); //Fill one valid entry
 	memset(disk + MBR_ENTRY_OFF, 0x00, 
 	       MBR_ENTRY_LEN * 3); //Zero fill 3 entries
@@ -138,23 +140,23 @@ static void write_gpt(u8 *disk) {
 		^ CRC_32_SEED;
 	gpt_header->HeaderCRC32;
 	
-	prink(KERN_INFO "The GPT_Table len is %s\n", gpt_header->HeaderSize);
+	printk(KERN_INFO "The GPT_Table len is %s\n", gpt_header->HeaderSize);
 	
 	/*WRITE FIRST MAIN GPT HEADER */
-	memset(disk + GPT_TBL_OFF, &gpt_header, GPT_TBL_LEN); //write first gpt header
+	memcpy(disk + GPT_TBL_OFF, &gpt_header, GPT_TBL_LEN); //write first gpt header
 	memset(disk + GPT_TBL_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
 
-	memset(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memcpy(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
 	memset(disk + GPT_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
 
 	/*WRITE BACKUP GPT HEADER */
-	memset(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memcpy(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
 	memset(disk + GPT_BACKUP_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
 
-	memset(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, GPT_TBL_LEN);
+	memcpy(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, GPT_TBL_LEN);
 	memset(disk + GPT_BACKUP_HEADER_ZERO_FF, 0x00, GPT_TBL_ZERO_LEN);
 
-	prink(KERN_INFO "GPT headers written\n");
+	printk(KERN_INFO "GPT headers written\n");
 }
 
 void write_headers(u8 *disk){

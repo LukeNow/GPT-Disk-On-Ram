@@ -4,15 +4,15 @@
 #include <linux/kdev_t.h>
 #include <linux/init.h>
 
-#include "parition.h"
+#include "partition.h"
 #include "ram_dev.h"
 
 #define BLOCK_SIZE 512
 
 static int __init dev_init(void)
 {
-	char buf[BLOCK_SIZE];
-	char *s = "Hello world!\n";
+	//char buf[BLOCK_SIZE];
+	//char *s = "Hello world!\n";
 	
 	
 	printk(KERN_INFO "Initializing TEST!\n");

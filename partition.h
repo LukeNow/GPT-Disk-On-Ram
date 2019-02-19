@@ -1,7 +1,7 @@
 #ifndef PARITION_H
 #define PARITION_H
 
-#define <linux/types.h>
+#include <linux/types.h>
 
 
 
