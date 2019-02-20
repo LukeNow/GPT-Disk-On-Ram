@@ -1,6 +1,6 @@
 #include <linux/vmalloc.h> 
 #include <linux/types.h>
-
+#include <linux/module.h>
 #include "partition.h"
 #include "ram_dev.h"
 
@@ -36,3 +36,6 @@ void ramdev_read(sector_t off, u8 *buffer, unsigned int blocks)
 	memcpy(buffer, disk + (off * BLOCK_SIZE), 
 	       blocks * BLOCK_SIZE);
 }
+
+
+MODULE_LICENSE("GPL");

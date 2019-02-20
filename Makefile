@@ -1,6 +1,5 @@
-obj-m += test_dev.o
-obj-m += ram_dev.o
-obj-m += partition.o
+obj-m := dor.o
+dor-objs := test_dev.o partition.o ram_dev.o
 
 module:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

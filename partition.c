@@ -2,7 +2,7 @@
 #include <linux/types.h>
 #include <linux/crc32.h>
 #include <linux/string.h>
-
+#include <linux/module.h>
 #include "partition.h"
 
 #define CRC_32_SEED 0xffffffff
@@ -33,7 +33,7 @@
 
 #define GPT_BACKUP_ENTRY_OFF (DISK_SIZE - (NUM_OF_LBA - 34) * LBA_LEN)
 #define GPT_BACKUP_ENTRY_ZERO_OFF (GPT_BACKUP_ENTRY_OFF + GPT_ENTRY_LEN)
-#define GPT_BACKUP_HEADER_OFF ((NUM_OF_LBA - 1) * lBA_LEN)
+#define GPT_BACKUP_HEADER_OFF ((NUM_OF_LBA - 1) * LBA_LEN)
 #define GPT_BACKUP_HEADER_ZERO_OFF (GPT_BACKUP_HEADER_OFF + GPT_TBL_LEN)
 
 
@@ -72,7 +72,7 @@ typedef struct {
 	u64	StartingLBA;
 	u64	EndingLBA;
 	u64	Attributes;
-	u16	TypeName[36];
+	char	TypeName[72];
 } gpt_table_entry;
 
 static const mbr_table_entry prot_mbr_entry = 
@@ -95,7 +95,7 @@ static const gpt_table_entry gpt_entry = {
 	EndingLBA: 0x03C6, 
 	Attributes: 0x00,
 	TypeName: "Test"
-}
+};
 
 
 
@@ -114,7 +114,7 @@ static gpt_table_header gpt_header = {
 	FirstEntryLBA: 0x02,
 	SizeOfEntry: 0x80,
 	EntriesCRC32: 0x00 //TO be calculated first
-}
+};
 
 
 static void write_prot_mbr(u8 *disk) {
@@ -128,33 +128,33 @@ static void write_prot_mbr(u8 *disk) {
 	//memset(disk + MBR_TABLE_LEN, 0x00, 
 	       //LBA_LEN - MBR_TABLE_LEN); //Zero fill rest of MBR to fit LBA len
 
-	prink(KERN_INFO "MBR header written\n");
+	printk(KERN_INFO "MBR header written\n");
 }
 
 static void write_gpt(u8 *disk) {
 	u32 crc = crc32(CRC_32_SEED , &gpt_entry, sizeof(gpt_table_entry)) 
 		^ CRC_32_SEED; // Xor at the end with 0xFF--
-	gpt_header->EntriesCRC32 = crc;
+	gpt_header.EntriesCRC32 = crc;
 	
 	crc = crc32(CRC_32_SEED, &gpt_header, sizeof(gpt_table_header))
 		^ CRC_32_SEED;
-	gpt_header->HeaderCRC32;
+	gpt_header.HeaderCRC32 = crc;
 	
-	printk(KERN_INFO "The GPT_Table len is %s\n", gpt_header->HeaderSize);
+	printk(KERN_INFO "The GPT_Table len is %d\n", gpt_header.HeaderSize);
 	
 	/*WRITE FIRST MAIN GPT HEADER */
-	memcpy(disk + GPT_TBL_OFF, &gpt_header, GPT_TBL_LEN); //write first gpt header
+	memcpy(disk + GPT_TBL_OFF, &gpt_header, sizeof(gpt_table_header)); //write first gpt header
 	memset(disk + GPT_TBL_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
 
-	memcpy(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memcpy(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, sizeof(gpt_table_entry));
 	memset(disk + GPT_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
 
 	/*WRITE BACKUP GPT HEADER */
-	memcpy(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, GPT_ENTRY_LEN);
+	memcpy(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, sizeof(gpt_table_entry));
 	memset(disk + GPT_BACKUP_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
 
-	memcpy(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, GPT_TBL_LEN);
-	memset(disk + GPT_BACKUP_HEADER_ZERO_FF, 0x00, GPT_TBL_ZERO_LEN);
+	memcpy(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, sizeof(gpt_table_header));
+	memset(disk + GPT_BACKUP_HEADER_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
 
 	printk(KERN_INFO "GPT headers written\n");
 }
@@ -163,3 +163,8 @@ void write_headers(u8 *disk){
 	write_prot_mbr(disk);
 	write_gpt(disk);
 }
+
+
+MODULE_LICENSE("GPL");
+
+

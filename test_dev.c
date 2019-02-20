@@ -9,26 +9,24 @@
 
 #define BLOCK_SIZE 512
 
-static int __init dev_init(void)
+int __init dev_init(void)
 {
 	//char buf[BLOCK_SIZE];
 	//char *s = "Hello world!\n";
 	
 	
-	printk(KERN_INFO "Initializing TEST!\n");
+	printk(KERN_INFO "TEST_DEV: Initializing TEST!\n");
 	ramdev_init();
 	
-
-	printk(KERN_INFO "Writing TEST!\n");
-	
+	printk(KERN_INFO "TEST_DEV: Writing TEST!\n");
 
 	return 0;
 }
 
-static void __exit dev_cleanup(void)
+void __exit dev_cleanup(void)
 {
 	ramdev_cleanup();
-	printk(KERN_INFO "Exiting TEST!\n");
+	printk(KERN_INFO "TEST_DEV: Exiting TEST!\n");
 }
 
 module_init(dev_init);
