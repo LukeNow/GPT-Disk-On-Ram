@@ -3,6 +3,8 @@
 
 #include <linux/types.h>
 
+#define SECTOR_SIZE 512
+
 extern int ramdisk_init(void);
 
 extern void ramdisk_cleanup(void);
