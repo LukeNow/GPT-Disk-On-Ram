@@ -5,7 +5,7 @@
 #include <linux/init.h>
 
 #include "partition.h"
-#include "ram_dev.h"
+#include "ram_disk.h"
 
 #define BLOCK_SIZE 512
 
@@ -16,7 +16,7 @@ int __init dev_init(void)
 	
 	
 	printk(KERN_INFO "TEST_DEV: Initializing TEST!\n");
-	ramdev_init();
+	ramdisk_init();
 	
 	printk(KERN_INFO "TEST_DEV: Writing TEST!\n");
 
@@ -25,7 +25,7 @@ int __init dev_init(void)
 
 void __exit dev_cleanup(void)
 {
-	ramdev_cleanup();
+	ramdisk_cleanup();
 	printk(KERN_INFO "TEST_DEV: Exiting TEST!\n");
 }
 

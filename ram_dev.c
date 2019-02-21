@@ -1,41 +1,65 @@
-#include <linux/vmalloc.h> 
-#include <linux/types.h>
 #include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/genhd.h>
+#include <linux/blkdev.h>
+#include <linux/errno.h>
+
 #include "partition.h"
-#include "ram_dev.h"
+#include "ram_disk.h"
 
-#define DISK_SIZE 0x100000
-#define BLOCK_SIZE 512
+#define FIRST_MINOR 0
+#define RD_MINOR_CNT 16 //hard cap
 
-static u8 *disk;
+#define MODULE_NAME "rd_dev"
 
-int ramdev_init(void)
+static unsigned int rd_major = 0;
+static int err = 0;
+
+static struct rd_device
 {
-	disk = vmalloc(DISK_SIZE);
-	if (disk == NULL)
-		return -ENOMEM;
+	unsigned int size; //IN SECTORS/BLOCKS
+	spinlock_t lock;
+	struct request_queue *rd_queue;
+	struct gendisk *rd_gendisk;
+} rd_dev;
 
-	write_headers(disk);
-		
-	return DISK_SIZE;
+int __init rd_init(void)
+{
+	int ret;
+
+	ret = ramdisk_init();
+	if (ret < 0) {
+		err = -ENOMEM;
+		goto RAMDISK_ALLOC_FAIL;
+	}
+	rd_dev.size = ret;
+	
+	rd_major = register_blkdev(rd_major, MODULE_NAME);
+	if (rd_major < 0) {
+		printk(KERN_ERR "rd_dev: Unable to allocate major num\n");
+		err = -EBUSY;
+		goto MAJOR_REGISTER_FAIL;
+	}
+	printk(KERN_INFO "rd_dev: Registered with major num %d\n", rd_major);
+	
+	return 0;
+
+MAJOR_REGISTER_FAIL:
+	unregister_blkdev(rd_major, MODULE_NAME);
+RAMDISK_ALLOC_FAIL:
+	ramdisk_cleanup();
+	
+	return err;
 }
 
-void ramdev_cleanup(void)
+void __exit rd_exit(void)
 {
-	vfree(disk);
+	unregister_blkdev(rd_major, MODULE_NAME);
+	ramdisk_cleanup();
+	printk(KERN_INFO "rd_dev: Unregistered device\n");
 }
 
-void ramdev_write(sector_t off, u8 *buffer, unsigned int blocks)
-{
-	memcpy(disk + (off * BLOCK_SIZE), buffer,
-	       blocks * BLOCK_SIZE);
-}
-
-void ramdev_read(sector_t off, u8 *buffer, unsigned int blocks)
-{
-	memcpy(buffer, disk + (off * BLOCK_SIZE), 
-	       blocks * BLOCK_SIZE);
-}
-
-
+module_init(rd_init);
+module_exit(rd_exit);
 MODULE_LICENSE("GPL");
