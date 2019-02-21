@@ -25,11 +25,11 @@ static struct rd_device
 } rd_dev;
 
 
-static int rd_open(struct block_device *bdev, fmod_t mode)
+static int rd_open(struct block_device *bdev, fmode_t mode)
 {
 	unsigned int i_minor = iminor(bdev->bd_inode);
 	
-	if (iminor > RD_MINOR_CNT) {
+	if (i_minor > RD_MINOR_CNT) {
 		printk(KERN_ERR "ram_dev: Open failed\n");
 		return -ENODEV;
 	}
@@ -39,10 +39,9 @@ static int rd_open(struct block_device *bdev, fmod_t mode)
 	return 0;
 }
 
-static int rd_close(struct gendisk *disk, fmode_t mode)
+static void rd_close(struct gendisk *disk, fmode_t mode)
 {
 	printk(KERN_INFO "ram_dev: Device closed\n");
-	return 0;
 }
 
 
@@ -105,7 +104,7 @@ static void rd_request(struct request_queue *q)
 static struct block_device_operations blk_fops = {
 	.owner = THIS_MODULE,
 	.open = rd_open,
-	.close = rd_close
+	.release = rd_close
 };
 
 
@@ -159,13 +158,19 @@ int __init rd_init(void)
 		goto DISK_ALLOC_FAIL;
 	}
 	
+	rd_dev.rd_gendisk->major = rd_major;
+	rd_dev.rd_gendisk->first_minor = FIRST_MINOR;
+	rd_dev.rd_gendisk->queue = rd_dev.rd_queue;
 	rd_dev.rd_gendisk->fops = &blk_fops;
 	rd_dev.rd_gendisk->private_data = &rd_dev;
-
-
+	snprintf(rd_dev.rd_gendisk->disk_name, 32, MODULE_NAME);
+	set_capacity(rd_dev.rd_gendisk, rd_dev.size);
 	
-
-
+	add_disk(rd_dev.rd_gendisk);
+ 
+	printk(KERN_INFO "rd: Ram Block driver initialised (%d sectors; %d bytes)\n",
+		rd_dev.size, rd_dev.size * RD_SECTOR_SIZE);
+ 
 	return 0;
 
 DISK_ALLOC_FAIL:
@@ -179,7 +184,9 @@ RAMDISK_ALLOC_FAIL:
 }
 
 void __exit rd_exit(void)
-{
+{	
+	del_gendisk(rd_dev.rd_gendisk);
+	put_disk(rd_dev.rd_gendisk);
 	unregister_blkdev(rd_major, MODULE_NAME);
 	ramdisk_cleanup();
 	printk(KERN_INFO "dor: Unregistered device\n");
