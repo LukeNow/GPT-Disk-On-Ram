@@ -1,1 +1,0 @@
-cmd_/home/luke/workspace/GPT-Disk-On-Ram/test.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000 -T ./scripts/module-common.lds  --build-id  -o /home/luke/workspace/GPT-Disk-On-Ram/test.ko /home/luke/workspace/GPT-Disk-On-Ram/test.o /home/luke/workspace/GPT-Disk-On-Ram/test.mod.o ;  true
