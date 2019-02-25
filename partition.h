@@ -5,7 +5,7 @@
 
 
 
-extern void write_headers(u8 *disk);
+extern void write_headers_to_disk(u8 *disk);
 
 
 

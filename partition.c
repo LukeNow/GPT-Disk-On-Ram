@@ -3,40 +3,36 @@
 #include <linux/crc32.h>
 #include <linux/string.h>
 #include <linux/module.h>
+#include <linux/uuid.h>
+#include <linux/swab.h>
+#include <asm/byteorder.h>
+
 #include "partition.h"
 
 #define CRC_32_SEED 0xffffffff
+#define PROT_MBR_SIG 0xAA55
+#define GPT_PMBR_OSTYPE  0xEE
+#define GPT_HEADER_SIGNATURE 0x5452415020494645LL /* EFI PART */
+#define GPT_HEADER_REVISION	0x00010000
 
+#define GPT_DEFAULT_ENTRY_TYPE "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
+
+#define GPT_PART_NAME_LEN (72 / sizeof(u16))
+#define PART_NUM 128
 #define DISK_SIZE 0x100000
+#define SECTOR_SIZE 512
+#define LBA_LEN SECTOR_SIZE
 #define LAST_USABLE_BLK DISK_SIZE - (34 * LBA_LEN)
 #define NUM_OF_LBA (DISK_SIZE / LBA_LEN)
 
-#define GPT_ENTRY_LEN 0x80
-#define GPT_TBL_LEN 92
-#define MBR_SIG_LEN 2
-#define MBR_TABLE_LEN 512
-#define MBR_ENTRY_LEN 16
-#define LBA_LEN 512
-#define GPT_FIRST_ENTRY_OFF (LBA_LEN * 2)
 
-#define MBR_ZERO_OFF 446
-#define MBR_ENTRY_OFF 462
-#define MBR_SIG_OFF 510
+#define PRIMARY_GPT_HEADER_OFF (1 * SECTOR_SIZE)
+#define PRIMARY_PART_ARRAY_OFF (2 * SECTOR_SIZE)
+#define SECONDARY_GPT_HEADER_OFF ((NUM_OFF_LBA - 1) * SECTOR_SIZE)
 
-#define GPT_TBL_OFF LBA_LEN
-#define GPT_TBL_ZERO_OFF (GPT_TBL_OFF + GPT_TBL_LEN)
-#define GPT_TBL_ZERO_LEN (GPT_FIRST_ENTRY_OFF - GPT_TBL_ZERO_OFF)
+#define PART_ARRAY_SIZE (PART_NUM * SECTOR_SIZE * sizeof(struct gpt_entry))
 
-#define GPT_ENTRY_ZERO_OFF (GPT_FIRST_ENTRY_OFF + GPT_ENTRY_LEN)
-#define GPT_ENTRY_ZERO_LEN (START_PART_OFF - GPT_ENTRY_ZERO_OFF)
-#define START_PART_OFF (34 * LBA_LEN)
-
-#define GPT_BACKUP_ENTRY_OFF (DISK_SIZE - (NUM_OF_LBA - 34) * LBA_LEN)
-#define GPT_BACKUP_ENTRY_ZERO_OFF (GPT_BACKUP_ENTRY_OFF + GPT_ENTRY_LEN)
-#define GPT_BACKUP_HEADER_OFF ((NUM_OF_LBA - 1) * LBA_LEN)
-#define GPT_BACKUP_HEADER_ZERO_OFF (GPT_BACKUP_HEADER_OFF + GPT_TBL_LEN)
-
-
+/*
 typedef struct {
 	char	BootIndicator;
 	char	StartingCHS[3];
@@ -45,8 +41,8 @@ typedef struct {
 	u32	StartingLBA;
 	u32	SizeInLBA;
 } mbr_table_entry;
-
-
+*/
+/*
 typedef struct {
 	char	Signature[8];
 	u32	Revision;
@@ -73,19 +69,78 @@ typedef struct {
 	u64	EndingLBA;
 	u64	Attributes;
 	char	TypeName[72];
-} gpt_table_entry;
+} gpt_table_entry; */
+/* Globally unique identifier */
+struct gpt_guid {
+	u32	time_low;
+	u16	time_mid;
+	u16	time_hi_and_version;
+	u8	node[8];
+};
+/* The GPT Partition entry array contains an array of GPT entries. */
+struct gpt_entry {
+	struct gpt_guid	type; /* purpose and type of the partition */
+	struct gpt_guid	partition_guid;
+	u64		lba_start;
+	u64		lba_end;
+	u64		attrs;
+	u16		name[GPT_PART_NAME_LEN];
+};
 
+/* GPT header */
+struct gpt_header {
+	u64            signature; /* header identification */
+	u32            revision; /* header version */
+	u32            size; /* in bytes */
+	u32            crc32; /* header CRC checksum */
+	u32            reserved1; /* must be 0 */
+	u64            my_lba; /* LBA of block that contains this struct (LBA 1) */
+	u64            alternative_lba; /* backup GPT header */
+	u64            first_usable_lba; /* first usable logical block for partitions */
+	u64            last_usable_lba; /* last usable logical block for partitions */
+	struct gpt_guid     disk_guid; /* unique disk identifier */
+	u64            partition_entry_lba; /* LBA of start of partition entries array */
+	u32            npartition_entries; /* total partition entries - normally 128 */
+	u32            sizeof_partition_entry; /* bytes for each GUID pt */
+	u32            partition_entry_array_crc32; /* partition CRC checksum */
+	u8             reserved2[512 - 92]; /* must all be 0 */
+};
+
+struct gpt_legacy_entry {
+	u8             boot_indicator; /* unused by EFI, set to 0x80 for bootable */
+	u8             start_head; /* unused by EFI, pt start in CHS */
+	u8             start_sector; /* unused by EFI, pt start in CHS */
+	u8             start_track;
+	u8             os_type; /* EFI and legacy non-EFI OS types */
+	u8             end_head; /* unused by EFI, pt end in CHS */
+	u8             end_sector; /* unused by EFI, pt end in CHS */
+	u8             end_track; /* unused by EFI, pt end in CHS */
+	u32            starting_lba; /* used by EFI - start addr of the on disk pt */
+	u32            size_in_lba; /* used by EFI - size of pt in LBA */
+};
+
+/* Protected MBR and legacy MBR share same structure */
+struct gpt_legacy_mbr {
+	u8             boot_code[440];
+	u32            unique_mbr_signature;
+	u16            unknown;
+	struct gpt_legacy_entry   part_entry[4];
+	u16            signature;
+};
+
+/*
 static const mbr_table_entry prot_mbr_entry = 
 {
 	BootIndicator: 0x00,
 	StartingCHS: { 0x00, 0x02, 0x00 } ,
 	OSType: 0xEE,
-	EndingCHS: { 0xFE, 0xFF, 0xFF }, //TODO
-	StartingLBA: 0x01, 
-	SizeInLBA: 0x07CF //Total LBA size - 1
+	EndingCHS: 0xFFFFFF, 
+	StartingLBA: 0x00000001, 
+	SizeInLBA: (NUM_OF_LBA - 1)//Total LBA size - 1
 
 };
-
+*/
+/*
 static const gpt_table_entry gpt_entry = {
 	TypeGUID1: 0xC12A7328F81F11D2,
 	TypeGUID2: 0xBA4B00A0C93EC93B,
@@ -95,10 +150,10 @@ static const gpt_table_entry gpt_entry = {
 	EndingLBA: 0x03C6, 
 	Attributes: 0x00,
 	TypeName: "Test"
-};
+}; */
 
 
-
+/*
 static gpt_table_header gpt_header = {
 	Signature: "EFI PART",
 	Revision: 0x00010000,
@@ -114,24 +169,89 @@ static gpt_table_header gpt_header = {
 	FirstEntryLBA: 0x02,
 	SizeOfEntry: 0x80,
 	EntriesCRC32: 0x00 //TO be calculated first
-};
+};*/
 
+/* prints UUID in the real byte order! */
+static void gpt_debug_uuid(uuid_t *guid)
+{
+	const unsigned char *uuid = (unsigned char *) guid;
 
-static void write_prot_mbr(u8 *disk) {
-	memset(disk, 0x0, MBR_ZERO_OFF); //Set first part of MBR to zero
-	memcpy(disk + MBR_ZERO_OFF, &prot_mbr_entry, 
-	       MBR_ENTRY_LEN); //Fill one valid entry
-	memset(disk + MBR_ENTRY_OFF, 0x00, 
-	       MBR_ENTRY_LEN * 3); //Zero fill 3 entries
-	
-	*(unsigned short *)(disk + MBR_SIG_OFF) = 0xAA55;
-	//memset(disk + MBR_TABLE_LEN, 0x00, 
-	       //LBA_LEN - MBR_TABLE_LEN); //Zero fill rest of MBR to fit LBA len
-
-	printk(KERN_INFO "MBR header written\n");
+	printk(KERN_INFO
+		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x\n",
+		uuid[0], uuid[1], uuid[2], uuid[3],
+		uuid[4], uuid[5],
+		uuid[6], uuid[7],
+		uuid[8], uuid[9],
+		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14],uuid[15]);
 }
 
-static void write_gpt(u8 *disk) {
+static void write_prot_mbr(struct gpt_legacy_mbr *pmbr) {
+	pmbr->part_entry[0].os_type = GPT_PMBR_OSTYPE;
+	pmbr->part_entry[0].start_sector = 2;
+	pmbr->part_entry[0].end_head = 0xFF;
+	pmbr->part_entry[0].end_sector = 0xFF;
+	pmbr->part_entry[0].end_track = 0xFF;
+	pmbr->part_entry[0].starting_lba = cpu_to_le32(1);
+	pmbr->part_entry[0].size_in_lba = cpu_to_le32(NUM_OF_LBA - 1ULL);
+	
+}
+
+static void write_gpt_header(struct gpt_header *h) {
+	
+	struct gpt_guid guid;
+
+	u64 entries_lba_size = sizeof(struct gpt_header) * PART_NUM / SECTOR_SIZE;
+	u64 first_entry_lba = entries_lba_size + 2;
+	u64 last_entry_lba = NUM_OF_LBA - entries_lba_size - 2;
+	
+	memset(&guid, 0, sizeof(struct gpt_guid));
+
+	h->signature = cpu_to_le64(GPT_HEADER_SIGNATURE);
+	h->revision = cpu_to_le32(GPT_HEADER_REVISION);
+	h->size = cpu_to_le32(sizeof(struct gpt_header) - sizeof(h->reserved2));
+	h->my_lba = cpu_to_le32(1);
+	h->alternative_lba = cpu_to_le32(NUM_OF_LBA-1);
+	h->partition_entry_lba = cpu_to_le64(2ULL);
+	h->npartition_entries = cpu_to_le32(PART_NUM);
+	h->sizeof_partition_entry = cpu_to_le32(sizeof(struct gpt_entry));
+	h->first_usable_lba = first_entry_lba;
+	h->last_usable_lba = last_entry_lba;
+
+	/* Set GUID to 0xFF - */
+	guid.time_low = ~0UL;
+	memset(&guid.node, ~0UL, sizeof(guid.node));
+	h->disk_guid = guid;
+	
+}
+
+static void write_part_entries(struct gpt_entry *e)
+{
+	
+	//struct gpt_guid g;
+	uuid_t uuid;
+	guid_t guid;
+
+	uuid_parse(GPT_DEFAULT_ENTRY_TYPE, &uuid);
+	uuid.b[0] = swab64(uuid.b[0]);
+	uuid.b[8] = swab64(uuid.b[8]); //TODO
+	
+	printk( KERN_INFO "THE STRING UUID IS %s\n" GPT_DEFAULT_ENTRY_TYPE);
+	gpt_debug_uuid(&uuid);
+	
+	/*
+	g.time_low = (gpt_guid)uuid.time_low;
+	g.time_mid = (gpt_guid)uuid.time_mid;
+	g.time_hi_and_version = (gpt_guid)uuid.time_hi_and_version;
+	g.node = (gpt_guid)uuid.node;
+	*/
+	memcpy(&e->type, &uuid, sizeof(uuid_t));
+	guid_gen(&guid);
+	memcpy(&e->partition_guid, &guid, sizeof(guid_t));
+}
+
+static void calculate_crc32(struct gpt_header *h, struct gpt_entry *e)
+{
+/*
 	u32 crc = crc32(CRC_32_SEED , &gpt_entry, sizeof(gpt_table_entry)) 
 		^ CRC_32_SEED; // Xor at the end with 0xFF--
 	gpt_header.EntriesCRC32 = crc;
@@ -139,32 +259,32 @@ static void write_gpt(u8 *disk) {
 	crc = crc32(CRC_32_SEED, &gpt_header, sizeof(gpt_table_header))
 		^ CRC_32_SEED;
 	gpt_header.HeaderCRC32 = crc;
-	
-	printk(KERN_INFO "The GPT_Table len is %d\n", gpt_header.HeaderSize);
-	
-	/*WRITE FIRST MAIN GPT HEADER */
-	memcpy(disk + GPT_TBL_OFF, &gpt_header, sizeof(gpt_table_header)); //write first gpt header
-	memset(disk + GPT_TBL_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
-
-	memcpy(disk + GPT_FIRST_ENTRY_OFF, &gpt_entry, sizeof(gpt_table_entry));
-	memset(disk + GPT_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
-
-	/*WRITE BACKUP GPT HEADER */
-	memcpy(disk + GPT_BACKUP_ENTRY_OFF, &gpt_entry, sizeof(gpt_table_entry));
-	memset(disk + GPT_BACKUP_ENTRY_ZERO_OFF, 0x00, GPT_ENTRY_ZERO_LEN);
-
-	memcpy(disk + GPT_BACKUP_HEADER_OFF, &gpt_header, sizeof(gpt_table_header));
-	memset(disk + GPT_BACKUP_HEADER_ZERO_OFF, 0x00, GPT_TBL_ZERO_LEN);
-
-	printk(KERN_INFO "GPT headers written\n");
+	*/
 }
 
-void write_headers(u8 *disk){
-	write_prot_mbr(disk);
-	write_gpt(disk);
+
+void write_headers_to_disk(u8 *disk){
+	
+	
+	struct gpt_header h;
+	struct gpt_legacy_mbr pmbr;
+	struct gpt_entry ent;
+
+	memset(&h, 0, sizeof(struct gpt_header));
+	memset(&pmbr, 0, sizeof(struct gpt_legacy_mbr));
+	memset(&ent, 0, sizeof(struct gpt_entry));
+
+	write_prot_mbr(&pmbr);
+	write_gpt_header(&h);
+	write_part_entries(&ent);
+
+
+
+
+
+	//memcpy(disk, &pmbr, sizeof(struct gpt_legacy_mbr));
 }
 
 
 MODULE_LICENSE("GPL");
-
 

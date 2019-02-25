@@ -16,7 +16,7 @@ int ramdisk_init(void)
 	if (disk == NULL)
 		return -ENOMEM;
 
-	write_headers(disk);
+	write_headers_to_disk(disk);
 		
 	return DISK_BLOCKS;
 }
