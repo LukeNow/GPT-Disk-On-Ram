@@ -1,1 +1,0 @@
-cmd_/home/luke/workspace/GPT-Disk-On-Ram/test.o := ld -m elf_x86_64  -z max-page-size=0x200000    -r -o /home/luke/workspace/GPT-Disk-On-Ram/test.o /home/luke/workspace/GPT-Disk-On-Ram/test_dev.o /home/luke/workspace/GPT-Disk-On-Ram/partition.o /home/luke/workspace/GPT-Disk-On-Ram/ram_disk.o 
