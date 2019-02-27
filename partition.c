@@ -25,12 +25,17 @@
 #define LAST_USABLE_BLK DISK_SIZE - (34 * LBA_LEN)
 #define NUM_OF_LBA (DISK_SIZE / LBA_LEN)
 
+#define PART_ARRAY_SIZE (PART_NUM * SECTOR_SIZE * sizeof(struct gpt_entry))
+#define PART_ARRAY_SZ_LBA (sizeof(struct gpt_header) * PART_NUM / SECTOR_SIZE)
+
+
+
 
 #define PRIMARY_GPT_HEADER_OFF (1 * SECTOR_SIZE)
 #define PRIMARY_PART_ARRAY_OFF (2 * SECTOR_SIZE)
-#define SECONDARY_GPT_HEADER_OFF ((NUM_OFF_LBA - 1) * SECTOR_SIZE)
+#define SEC_GPT_HEADER_OFF ((NUM_OF_LBA - 1) * SECTOR_SIZE)
+#define SEC_GPT_PART_ARRAY_OFF ((NUM_OF_LBA - 1 - PART_ARRAY_SZ_LBA) * SECTOR_SIZE)
 
-#define PART_ARRAY_SIZE (PART_NUM * SECTOR_SIZE * sizeof(struct gpt_entry))
 
 /*
 typedef struct {
@@ -220,7 +225,7 @@ static void write_gpt_header(struct gpt_header *h) {
 	/* Set GUID to 0xFF - */
 	guid.time_low = ~0UL;
 	memset(&guid.node, ~0UL, sizeof(guid.node));
-	h->disk_guid = guid;
+	h->disk_guid = guid; //LE?
 	
 }
 
@@ -251,20 +256,17 @@ static void write_part_entries(struct gpt_entry *e)
 
 static void calculate_crc32(struct gpt_header *h, struct gpt_entry *e)
 {
-/*
-	u32 crc = crc32(CRC_32_SEED , &gpt_entry, sizeof(gpt_table_entry)) 
+	u32 crc = crc32(CRC_32_SEED , e, sizeof(struct gpt_entry)) 
 		^ CRC_32_SEED; // Xor at the end with 0xFF--
-	gpt_header.EntriesCRC32 = crc;
+	h->partition_entry_array_crc32 = cpu_to_le32(crc);
 	
-	crc = crc32(CRC_32_SEED, &gpt_header, sizeof(gpt_table_header))
+	crc = crc32(CRC_32_SEED, h, sizeof(struct gpt_header))
 		^ CRC_32_SEED;
-	gpt_header.HeaderCRC32 = crc;
-	*/
+	h->crc32 = cpu_to_le32(crc);
 }
 
 
 void write_headers_to_disk(u8 *disk){
-	
 	
 	struct gpt_header h;
 	struct gpt_legacy_mbr pmbr;
@@ -278,11 +280,18 @@ void write_headers_to_disk(u8 *disk){
 	write_gpt_header(&h);
 	write_part_entries(&ent);
 
+	calculate_crc32(&h, &ent);
 
+	memcpy(disk, &pmbr, sizeof(struct gpt_legacy_mbr));
+	memcpy(disk + PRIMARY_GPT_HEADER_OFF, &h, sizeof(struct gpt_header));
+	memcpy(disk + SEC_GPT_HEADER_OFF, &ent, sizeof(struct gpt_entry));
+	memcpy(disk + SEC_GPT_PART_ARRAY_OFF, &ent, sizeof(struct gpt_entry));
+	memcpy(disk + SEC_GPT_HEADER_OFF, &h, sizeof(struct gpt_header));
 
-
-
-	//memcpy(disk, &pmbr, sizeof(struct gpt_legacy_mbr));
+	printk(KERN_INFO "PRIMARY HEADER OFF %d\n", PRIMARY_GPT_HEADER_OFF);
+	printk(KERN_INFO "PRIMARY PART_ARRAY OFF %llu\n", (unsigned long long)PRIMARY_PART_ARRAY_OFF);
+	printk(KERN_INFO "SEC PART_ARRAY OFF %llu\n", (unsigned long long)SEC_GPT_PART_ARRAY_OFF);
+	printk(KERN_INFO "SEC HEADER OFF  %llu\n", (unsigned long long)SEC_GPT_HEADER_OFF);
 }
 
 
