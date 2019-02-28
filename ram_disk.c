@@ -1,6 +1,7 @@
 #include <linux/vmalloc.h> 
 #include <linux/types.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include "partition.h"
 #include "ram_disk.h"
 
@@ -12,9 +13,12 @@ static u8 *disk;
 
 int ramdisk_init(void)
 {
-	disk = vmalloc(DISK_SIZE);
+	//disk = vzalloc(DISK_SIZE);
+	disk = kzalloc(DISK_SIZE, GFP_KERNEL);
 	if (disk == NULL)
 		return -ENOMEM;
+	
+	memset(disk, 0, DISK_SIZE);
 
 	write_headers_to_disk(disk);
 		
@@ -23,7 +27,8 @@ int ramdisk_init(void)
 
 void ramdisk_cleanup(void)
 {
-	vfree(disk);
+	//vfree(disk);
+	kfree(disk);
 }
 
 void ramdisk_write(sector_t off, u8 *buffer, unsigned int blocks)

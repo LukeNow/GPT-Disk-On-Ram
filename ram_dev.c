@@ -108,17 +108,6 @@ static struct block_device_operations blk_fops = {
 };
 
 
-
-
-
-
-
-
-
-
-
-
-
 int __init rd_init(void)
 {
 	int ret;
