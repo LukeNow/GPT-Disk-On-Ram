@@ -6,6 +6,7 @@
 #include <linux/uuid.h>
 #include <linux/swab.h>
 #include <asm/byteorder.h>
+#include <linux/membarrier.h>
 #include <linux/slab.h>
 #include "partition.h"
 
@@ -32,6 +33,8 @@
 #define PRIMARY_PART_ARRAY_OFF (2 * SECTOR_SIZE)
 #define SEC_GPT_HEADER_OFF ((NUM_OF_LBA - 1) * SECTOR_SIZE)
 #define SEC_GPT_PART_ARRAY_OFF ((NUM_OF_LBA - 1 - PART_ARRAY_SZ_LBA) * SECTOR_SIZE)
+
+#define TEST_OFF 1031680
 
 /* Globally unique identifier */
 struct gpt_guid {
@@ -171,7 +174,7 @@ static void write_gpt_header(struct gpt_header *h) {
 
 	u64 entries_lba_size = sizeof(struct gpt_entry) * PART_NUM / SECTOR_SIZE;
 	u64 first_entry_lba = entries_lba_size + 2;
-	u64 last_entry_lba = NUM_OF_LBA - entries_lba_size - 1;
+	u64 last_entry_lba = NUM_OF_LBA - entries_lba_size - 2;
 	
 	memset(&guid, 0, sizeof(struct gpt_guid));
 
@@ -202,7 +205,7 @@ static void write_part_entries(struct gpt_entry *e)
 	guid_t guid;
 	u64 entries_lba_size = sizeof(struct gpt_entry) * PART_NUM / SECTOR_SIZE;
 	u64 first_entry_lba = entries_lba_size + 2;
-	u64 last_entry_lba = NUM_OF_LBA - entries_lba_size - 1;
+	u64 last_entry_lba = NUM_OF_LBA - entries_lba_size - 2;
 
 	uuid_parse(GPT_DEFAULT_ENTRY_TYPE, &uuid);
 	uuid.b[0] = swab64(uuid.b[0]);
@@ -313,7 +316,6 @@ void write_headers_to_disk(u8 *disk){
 	struct gpt_entry *ent2;
 	
 	h = (struct gpt_header *)kmalloc(sizeof(struct gpt_header), GFP_KERNEL);
-	
 	h2 = (struct gpt_header *)kmalloc(sizeof(struct gpt_header), GFP_KERNEL);
 	pmbr = (struct gpt_legacy_mbr *)kmalloc(sizeof(struct gpt_legacy_mbr), GFP_KERNEL);
 	ent = (struct gpt_entry *)kmalloc(sizeof(struct gpt_entry), GFP_KERNEL);
@@ -334,13 +336,26 @@ void write_headers_to_disk(u8 *disk){
 	calculate_crc32(h, ent);
 	calculate_crc32(h2, ent2);
 	
+
+	//mb();
+	//memcpy(disk + SEC_GPT_PART_ARRAY_OFF, ent2, sizeof(struct gpt_entry));
+	
 	memcpy(disk, pmbr, sizeof(struct gpt_legacy_mbr));
 	memcpy(disk + PRIMARY_GPT_HEADER_OFF, h, sizeof(struct gpt_header));
 	memcpy(disk + PRIMARY_PART_ARRAY_OFF, ent, sizeof(struct gpt_entry));
-	//memcpy(disk + SEC_GPT_PART_ARRAY_OFF, ent2, sizeof(struct gpt_entry));
-	memcpy(disk + SEC_GPT_HEADER_OFF, h2, sizeof(struct gpt_header));
+	memcpy(disk + SEC_GPT_HEADER_OFF, h, sizeof(struct gpt_header));
+	memcpy(disk + TEST_OFF, h, sizeof(struct gpt_entry));
 	
-	printk(KERN_INFO "SEC PART_ARRAY OFF %llu\n", (unsigned long long)SEC_GPT_PART_ARRAY_OFF );
+	//memcpy(disk + TEST_OFF, ent2, sizeof(struct gpt_entry));
+	//memcpy(disk + TEST_OFF, h2, sizeof(struct gpt_header));
+	
+	//char *s = "Hello";
+	//memcpy(disk + SEC_GPT_PART_ARRAY_OFF, s, 6);
+
+
+
+
+	printk(KERN_INFO "SEC PART_ARRAY OFF %llu\n", (unsigned long long)SEC_GPT_PART_ARRAY_OFF/SECTOR_SIZE );
 	printk(KERN_INFO "SEC HEADER OFF  %llu\n", (unsigned long long)SEC_GPT_HEADER_OFF);
 	
 	/*

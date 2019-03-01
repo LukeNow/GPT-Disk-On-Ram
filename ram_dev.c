@@ -97,10 +97,6 @@ static void rd_request(struct request_queue *q)
 	}
 }
 
-
-
-
-
 static struct block_device_operations blk_fops = {
 	.owner = THIS_MODULE,
 	.open = rd_open,
