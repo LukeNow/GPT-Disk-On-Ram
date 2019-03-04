@@ -2,9 +2,10 @@
 #define RAMDISK_H
 
 #include <linux/types.h>
+#include "partition.h"
 
+#define RD_DISK_SIZE DISK_SIZE
 #define RD_SECTOR_SIZE 512
-#define RD_DISK_SIZE 0x100000
 #define RD_SECTOR_NUM (DISK_SIZE / SECTOR_SIZE)
 
 extern int ramdisk_init(void);
