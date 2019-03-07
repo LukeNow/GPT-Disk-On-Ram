@@ -185,4 +185,4 @@ module_exit(rd_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Luke Nowakowski-Krijger <lnowakow@eng.ucsd.edu>");
-MODULE_DESCRIPTION("Ram On Disk Driver");
+MODULE_DESCRIPTION("Disk on Ram Driver");
