@@ -6,9 +6,10 @@
 #include <linux/uuid.h>
 #include <linux/swab.h>
 #include <asm/byteorder.h>
-#include <linux/membarrier.h>
 #include <linux/slab.h>
 #include "partition.h"
+
+#define DEBUG 0
 
 #define CRC_32_SEED 0xffffffff
 #define PROT_MBR_SIG 0xAA55
@@ -28,15 +29,12 @@
 #define PART_ARRAY_SZ_LBA (PART_ARRAY_SIZE / SECTOR_SIZE)
 #define PART_ENTRY_LBA_SZ (sizeof(gpt_entry) * PART_NUM / SECTOR_SIZE)
 #define FIRST_ENTRY_LBA (PART_ENTRY_LBA_SZ + 2)
-#define LAST_ENTRY_LBA (NUM_OF_LBA - PART_ENTRY_LBA_SZ - 2)  //Change last entry to 2?
-
+#define LAST_ENTRY_LBA (NUM_OF_LBA - PART_ENTRY_LBA_SZ - 2)
 
 #define PRIMARY_GPT_HEADER_OFF (1 * SECTOR_SIZE)
 #define PRIMARY_PART_ARRAY_OFF (2 * SECTOR_SIZE)
 #define SEC_GPT_HEADER_OFF ((NUM_OF_LBA - 1) * SECTOR_SIZE)
 #define SEC_GPT_PART_ARRAY_OFF ((NUM_OF_LBA - 1 - PART_ARRAY_SZ_LBA) * SECTOR_SIZE)
-
-#define TEST_OFF (SEC_GPT_PART_ARRAY_OFF  + 1028)
 
 /* Globally unique identifier */
 struct gpt_guid {
@@ -45,6 +43,7 @@ struct gpt_guid {
 	u16	time_hi_and_version;
 	u8	node[8];
 }__packed;
+
 /* The GPT Partition entry array contains an array of GPT entries. */
 typedef struct gpt_entry {
 	struct gpt_guid	type; /* purpose and type of the partition */
@@ -96,155 +95,13 @@ typedef struct gpt_legacy_mbr {
 	u16            signature;
 }__packed gpt_legacy_mbr;
 
-/*
-static const mbr_table_entry prot_mbr_entry = 
-{
-	BootIndicator: 0x00,
-	StartingCHS: { 0x00, 0x02, 0x00 } ,
-	OSType: 0xEE,
-	EndingCHS: 0xFFFFFF, 
-	StartingLBA: 0x00000001, 
-	SizeInLBA: (NUM_OF_LBA - 1)//Total LBA size - 1
-
-};
-*/
-/*
-static const gpt_table_entry gpt_entry = {
-	TypeGUID1: 0xC12A7328F81F11D2,
-	TypeGUID2: 0xBA4B00A0C93EC93B,
-	UniqueGUID1: 0x1000000000000000,
-	UniqueGUID2: 0x1000000000000000,
-	StartingLBA: 0x20,
-	EndingLBA: 0x03C6, 
-	Attributes: 0x00,
-	TypeName: "Test"
-}; */
-
-
-/*
-static gpt_table_header gpt_header = {
-	Signature: "EFI PART",
-	Revision: 0x00010000,
-	HeaderSize: 0x5D,
-	HeaderCRC32: 0x00, //TO be calculated second
-	Reserved: 0x00,
-	PrimaryLBA: 0x01,
-	BackupLBA: 0x07CF, //CHECK
-	FirstUsableLBA: 0x20,
-	LastUsableLBA: 0x03C6, //966 
-	UniqueGUID1: 0x1000000000000000,
-	UniqueGUID2: 0x1000000000000000,
-	FirstEntryLBA: 0x02,
-	SizeOfEntry: 0x80,
-	EntriesCRC32: 0x00 //TO be calculated first
-};*/
-
-/* prints UUID in the real byte order! */
-static void gpt_debug_uuid(uuid_t *guid)
-{
-	const unsigned char *uuid = (unsigned char *) guid;
-
-	printk(KERN_INFO
-		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x\n",
-		uuid[0], uuid[1], uuid[2], uuid[3],
-		uuid[4], uuid[5],
-		uuid[6], uuid[7],
-		uuid[8], uuid[9],
-		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14],uuid[15]);
-}
-
 static inline u32
 efi_crc32(const void *buf, unsigned long len)
 {
 	return (crc32(~0L, buf, len) ^ ~0L);
 }
 
-static void write_prot_mbr(gpt_legacy_mbr *pmbr) {
-	pmbr->part_entry[0].os_type = GPT_PMBR_OSTYPE;
-	pmbr->part_entry[0].start_sector = 1; //Is it 1?
-	pmbr->part_entry[0].end_head = 0xFF;
-	pmbr->part_entry[0].end_sector = 0xFF;
-	pmbr->part_entry[0].end_track = 0xFF;
-	pmbr->part_entry[0].starting_lba = cpu_to_le32(1);
-	pmbr->part_entry[0].size_in_lba = cpu_to_le32(NUM_OF_LBA - 1ULL);
-	pmbr->signature = cpu_to_le32(PROT_MBR_SIG);
-}
-
-static void write_primary_gpt_header(gpt_header *h) {
-	
-	struct gpt_guid guid;
-
-	memset(&guid, 0, sizeof(struct gpt_guid));
-
-	h->signature = cpu_to_le64(GPT_HEADER_SIGNATURE);
-	h->revision = cpu_to_le32(GPT_HEADER_REVISION);
-	h->size = cpu_to_le32(sizeof(gpt_header) - sizeof(h->reserved2));
-	h->my_lba = cpu_to_le32(1);
-	h->alternative_lba = cpu_to_le32(NUM_OF_LBA-1);
-	h->partition_entry_lba = cpu_to_le64(2ULL);
-	h->npartition_entries = cpu_to_le32(PART_NUM); //1 or PARTNUM?
-	h->sizeof_partition_entry = cpu_to_le32(sizeof(gpt_entry));
-	h->first_usable_lba = cpu_to_le64(FIRST_ENTRY_LBA);
-	h->last_usable_lba = cpu_to_le64(LAST_ENTRY_LBA);
-	
-	printk(KERN_INFO "FIRST LBA %lld LAST LBA %lld\n", FIRST_ENTRY_LBA, LAST_ENTRY_LBA);
-	/* Set GUID to 0xFF - */
-	guid.time_low = ~0UL;
-	memset(&guid.node, ~0UL, sizeof(guid.node));
-	h->disk_guid = guid; //LE?
-	
-}
-
-static void write_secondary_gpt_header(gpt_header *h) 
-{
-	write_primary_gpt_header(h); //Everything the same
-	h->my_lba = cpu_to_le32(NUM_OF_LBA-1); //Extept for my_lba and alt_lba
-	h->alternative_lba = cpu_to_le32(1);
-}
-
-
-static void write_part_entries(gpt_entry *ents)
-{
-	gpt_entry e;
-	//struct gpt_guid g;
-	uuid_t uuid;
-	guid_t guid;
-	
-	uuid_parse(GPT_DEFAULT_ENTRY_TYPE, &uuid);
-	uuid.b[0] = swab64(uuid.b[0]);
-	uuid.b[8] = swab64(uuid.b[8]); //TODO
-	
-	printk( KERN_INFO "THE STRING UUID IS %s\n" GPT_DEFAULT_ENTRY_TYPE);
-	gpt_debug_uuid(&uuid);
-	
-	/*
-	g.time_low = (gpt_guid)uuid.time_low;
-	g.time_mid = (gpt_guid)uuid.time_mid;
-	g.time_hi_and_version = (gpt_guid)uuid.time_hi_and_version;
-	g.node = (gpt_guid)uuid.node;
-	*/
-	memcpy(&e.type, &uuid, sizeof(uuid_t));
-	guid_gen(&guid);
-	memcpy(&e.partition_guid, &guid, sizeof(guid_t));
-	
-	e.lba_start = cpu_to_le32(FIRST_ENTRY_LBA);
-	e.lba_end = cpu_to_le32(LAST_ENTRY_LBA);
-	
-	memcpy(ents, &e, sizeof(gpt_entry));
-}
-
-static void calculate_crc32(gpt_header *h, gpt_entry *ents)
-{
-	h->partition_entry_array_crc32 = 0;
-	h->crc32 = 0;
-
-	u32 crc = efi_crc32(ents, PART_ARRAY_SIZE);
-	h->partition_entry_array_crc32 = cpu_to_le32(crc);
-	
-	crc = efi_crc32(h, sizeof(gpt_header) - sizeof(h->reserved2));
-	h->crc32 = cpu_to_le32(crc);
-}
-/*
+#if DEBUG
 static int is_pmbr_valid(gpt_legacy_mbr *mbr)
 {
 	int i, found = 0, signature = 0;
@@ -265,19 +122,19 @@ static int is_pmbr_valid(gpt_legacy_mbr *mbr)
 static int is_gpt_valid(gpt_header *h, gpt_entry *ent)
 {
 	int rc = 0;
-	
+	u32 hdrsz, origcrc, crc;
+
 	if (le64_to_cpu((h)->signature) != GPT_HEADER_SIGNATURE) {
 		printk(KERN_ERR "INVALID HEADER SIG\n");
 		return rc;
 	}
 
-	u32 hdrsz = le32_to_cpu(h->size);
-	u32 origcrc, crc;
+	hdrsz = le32_to_cpu(h->size);
 	origcrc = le32_to_cpu(h->crc32);
 	h->crc32 = 0;
 	crc = efi_crc32((const unsigned char *)(h), le32_to_cpu(h->size));
 
-	printk(KERN_INFO "ORIG=%ld, CRC=%ld \n", origcrc, crc);
+	printk(KERN_INFO "ORIG=%du, CRC=%du \n", origcrc, crc);
 	if (crc != origcrc) {
 		
 		printk(KERN_ERR "INVALID HEADER CRC\n");
@@ -308,14 +165,91 @@ static void test_headers(gpt_legacy_mbr *mbr, gpt_header *h,
 
 	printk(KERN_INFO "TEST SUCCESS\n");
 }
-*/
+#endif
+
+static void write_prot_mbr(gpt_legacy_mbr *pmbr) {
+	pmbr->part_entry[0].os_type = GPT_PMBR_OSTYPE;
+	pmbr->part_entry[0].start_sector = 1; 
+	pmbr->part_entry[0].end_head = 0xFF;
+	pmbr->part_entry[0].end_sector = 0xFF;
+	pmbr->part_entry[0].end_track = 0xFF;
+	pmbr->part_entry[0].starting_lba = cpu_to_le32(1);
+	pmbr->part_entry[0].size_in_lba = cpu_to_le32(NUM_OF_LBA - 1ULL);
+	pmbr->signature = cpu_to_le32(PROT_MBR_SIG);
+}
+
+static void write_primary_gpt_header(gpt_header *h) {
+	
+	struct gpt_guid guid;
+
+	memset(&guid, 0, sizeof(struct gpt_guid));
+
+	h->signature = cpu_to_le64(GPT_HEADER_SIGNATURE);
+	h->revision = cpu_to_le32(GPT_HEADER_REVISION);
+	h->size = cpu_to_le32(sizeof(gpt_header) - sizeof(h->reserved2));
+	h->my_lba = cpu_to_le32(1);
+	h->alternative_lba = cpu_to_le32(NUM_OF_LBA-1);
+	h->partition_entry_lba = cpu_to_le64(2ULL);
+	h->npartition_entries = cpu_to_le32(PART_NUM); 
+	h->sizeof_partition_entry = cpu_to_le32(sizeof(gpt_entry));
+	h->first_usable_lba = cpu_to_le64(FIRST_ENTRY_LBA);
+	h->last_usable_lba = cpu_to_le64(LAST_ENTRY_LBA);
+	/* Set GUID to 0xFF - */
+	guid.time_low = ~0;
+	memset(&guid.node, ~0, sizeof(guid.node));
+	h->disk_guid = guid; 
+	
+}
+
+static void write_secondary_gpt_header(gpt_header *h) 
+{
+	write_primary_gpt_header(h); //Everything the same
+	h->my_lba = cpu_to_le32(NUM_OF_LBA-1); //Extept for my_lba and alt_lba
+	h->alternative_lba = cpu_to_le32(1);
+}
+
+
+static void write_part_entries(gpt_entry *ents)
+{
+	gpt_entry e;
+	uuid_t uuid;
+	guid_t guid;
+	
+	uuid_parse(GPT_DEFAULT_ENTRY_TYPE, &uuid);
+	uuid.b[0] = swab64(uuid.b[0]);
+	uuid.b[8] = swab64(uuid.b[8]); //TODO
+	
+	
+	memcpy(&e.type, &uuid, sizeof(uuid_t));
+	guid_gen(&guid);
+	memcpy(&e.partition_guid, &guid, sizeof(guid_t));
+	
+	e.lba_start = cpu_to_le32(FIRST_ENTRY_LBA);
+	e.lba_end = cpu_to_le32(LAST_ENTRY_LBA);
+	
+	memcpy(ents, &e, sizeof(gpt_entry));
+}
+
+static void calculate_crc32(gpt_header *h, gpt_entry *ents)
+{
+	u32 crc;
+	
+	h->partition_entry_array_crc32 = 0;
+	h->crc32 = 0;
+
+	crc = efi_crc32(ents, PART_ARRAY_SIZE);
+	h->partition_entry_array_crc32 = cpu_to_le32(crc);
+	
+	crc = efi_crc32(h, sizeof(gpt_header) - sizeof(h->reserved2));
+	h->crc32 = cpu_to_le32(crc);
+}
+
 void write_headers_to_disk(u8 *disk){
 	
 	gpt_header *h;
 	gpt_header *h2;
 	gpt_legacy_mbr *pmbr;
 	gpt_entry *ents;
-
 
 	h = (gpt_header *)kmalloc(sizeof(gpt_header), GFP_KERNEL);
 	h2 = (gpt_header *)kmalloc(sizeof(gpt_header), GFP_KERNEL);
@@ -334,46 +268,19 @@ void write_headers_to_disk(u8 *disk){
 
 	calculate_crc32(h, ents); 
 	calculate_crc32(h2, ents); 
-	//mb();
 	
 	memcpy(disk, pmbr, sizeof(gpt_legacy_mbr));
 	memcpy(disk + PRIMARY_GPT_HEADER_OFF, h, sizeof(gpt_header));
 	memcpy(disk + PRIMARY_PART_ARRAY_OFF, ents, PART_ARRAY_SIZE);
 	memcpy(disk + SEC_GPT_HEADER_OFF, h2, sizeof(gpt_header));
 	memcpy(disk + SEC_GPT_PART_ARRAY_OFF, ents, PART_ARRAY_SIZE);
-	//memcpy(disk + TEST_OFF, ent2, sizeof(gpt_entry));
-	//memcpy(disk + TEST_OFF, h2, sizeof(gpt_header));
 	
-	//char *s = "Hello";
-	//memcpy(disk + SEC_GPT_PART_ARRAY_OFF, s, 6);
-
-
-
-
-	printk(KERN_INFO "SEC PART_ARRAY OFF %llu\n", (unsigned long long)SEC_GPT_PART_ARRAY_OFF/SECTOR_SIZE );
-	printk(KERN_INFO "SEC HEADER OFF  %llu\n", (unsigned long long)SEC_GPT_HEADER_OFF);
-	
-	/*
-	printk(KERN_INFO "PRIMARY HEADER OFF %d\n", PRIMARY_GPT_HEADER_OFF);
-	printk(KERN_INFO "PRIMARY PART_ARRAY OFF %llu\n", (unsigned long long)PRIMARY_PART_ARRAY_OFF);
-	printk(KERN_INFO "NUM OF LBA: %llu - 1 - NUM_PART_LBA: %llu = %llu\n", NUM_OF_LBA, 
-		PART_ARRAY_SZ_LBA, NUM_OF_LBA - 1 - PART_ARRAY_SZ_LBA);
-	printk(KERN_INFO "SEC PART_ARRAY OFF %llu\n", (unsigned long long)SEC_GPT_PART_ARRAY_OFF );
-	printk(KERN_INFO "SEC HEADER OFF  %llu\n", (unsigned long long)(SEC_GPT_HEADER_OFF / SECTOR_SIZE));
-	
-	test_headers(&pmbr, &h, &ent);
-
-	printk(KERN_INFO "SIZE OF PMBR %d", 
-			sizeof(gpt_legacy_mbr));
-	*/
+#if DEBUG
+	test_headers(pmbr, h, ents);
+#endif
 
 	kfree(h);
 	kfree(h2);
 	kfree(pmbr);
 	kfree(ents);
 }
-
-
-
-MODULE_LICENSE("GPL");
-
