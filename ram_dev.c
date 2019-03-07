@@ -58,13 +58,13 @@ static int rd_service(struct request *rq)
 		unsigned long offset = bvec.bv_offset; 
 		
 		size_t len = bvec.bv_len;
-		sector_t sector_num = (len / SECTOR_SIZE);
+		sector_t sector_num = len;
 		int dir = bio_data_dir(iter.bio);
 		
 		if (dir == WRITE) 
-			ramdisk_write(sector + offset, buffer, sector_num);
+			ramdisk_write(sector, buffer + offset, sector_num);
 		else
-			ramdisk_read(sector + offset, buffer, sector_num);
+			ramdisk_read(sector, buffer + offset, sector_num);
 
 		kunmap_atomic(buffer);
 	}

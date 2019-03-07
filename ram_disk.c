@@ -31,7 +31,7 @@ void ramdisk_cleanup(void)
 void ramdisk_write(sector_t off, u8 *buffer, unsigned int blocks)
 {
 	memcpy(disk + (off * BLOCK_SIZE), buffer,
-	       blocks * BLOCK_SIZE);
+	       blocks);
 	
 	//printk(KERN_INFO "WRITING %d BLOCKS TO BLOCK %ld\n", blocks, off);
 }
@@ -39,7 +39,7 @@ void ramdisk_write(sector_t off, u8 *buffer, unsigned int blocks)
 void ramdisk_read(sector_t off, u8 *buffer, unsigned int blocks)
 {
 	memcpy(buffer, disk + (off * BLOCK_SIZE), 
-	       blocks * BLOCK_SIZE);
+	       blocks);
 
 	//printk(KERN_INFO "READING %d BLOCKS FROM BLOCK %ld\n", blocks, off);
 }
