@@ -11,7 +11,7 @@ First make sure that you have your current kernel's latest module-header files. 
 
 In Arch based systems this can be done by installing the meta-package and then selecting your kernel's headers by typing
 
-$ sudo pacman -Sy linux-headers
+    $ sudo pacman -Sy linux-headers
 
 In Debian based systems this can be similiarly done with
 
@@ -21,7 +21,7 @@ $sudo apt-get install linux-headers-$(uname -r)
 
 Enter the GPT-Disk-On-Ram directory and type 
 
-$ make
+    $ make
 
 If it complains that it cannot find the directory /lib/modules/$(KERNEL_VERSION) then you need to install the latest kernel headers for your currently running kernel. 
 If all is well you should see a dor.ko file. 
@@ -33,7 +33,7 @@ With the dor.ko file, we will now load the module. The great thing about Linux k
 
 To load the driver type
 
-$ sudo insmod dor.ko
+    $ sudo insmod dor.ko
 
 This will load the driver. If it does not let you, make sure that your kernel headers match the currently running kernel.
 If all is well, the module should now be loaded and running. 
@@ -41,11 +41,15 @@ If all is well, the module should now be loaded and running.
 -- Testing the driver
 
 To see if the module was successfully loaded type
-$ dmesg | grep "dor"
+
+    $ dmesg | grep "dor"
+
 There should be a status message saying that the driver was loaded or an error message telling you why it did not load. 
 If all is well the kernel should have registered the disk as being active and usable. 
 Type
-$ sudo fdisk -l
+
+    $ sudo fdisk -l
+
 To see a list of disk, our kernel driver should be one of them with the name "/dev/dor" and a partition named "/dev/dor1"
 The disk should now be accessible and ready to use. 
 
@@ -56,9 +60,9 @@ Now with the driver loaded the virtual disk operates like a regular disk and can
 
 Here is an example of formating and mounting your drive using the first partition of the disk.
 
-$ sudo mkfs.ext2 /dev/dor1
-$ sudo mount /dev/dor1 /mnt
-$ cd /mnt 
+    $ sudo mkfs.ext2 /dev/dor1
+    $ sudo mount /dev/dor1 /mnt
+    $ cd /mnt 
 
 You now have your own disk environment to play in! Remember that this is stored on RAM and will not persist after reboot.
 
@@ -67,11 +71,11 @@ To unload the driver one could simply reboot and the OS will do all the proper u
 To unload the driver manually we need to take a few extra steps. 
 First make sure to cease all uses of the drive and in particular unmount the drive if you mounted it.
 
-$ sudo umount /mnt 
+    $ sudo umount /mnt 
 
 Next we remove the device driver 
 
-$ sudo rmmod dor
+    $ sudo rmmod dor
 
 Everything should be removed and the device driver should no longer be active. 
 
