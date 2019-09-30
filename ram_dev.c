@@ -34,14 +34,12 @@ static int rd_open(struct block_device *bdev, fmode_t mode)
 		return -ENODEV;
 	}
 
-	//printk(KERN_INFO "%s: ram_dev: Device opened with Inode %d\n",
-	//	MODULE_NAME, i_minor);
 	return 0;
 }
 
 static void rd_close(struct gendisk *disk, fmode_t mode)
 {
-	//printk(KERN_INFO "%s: ram_dev: Device closed\n", MODULE_NAME);
+	return;
 }
 
 /* We service the request */
@@ -153,7 +151,7 @@ int __init rd_init(void)
 	snprintf(rd_dev.rd_gendisk->disk_name, 32, MODULE_NAME);
 	set_capacity(rd_dev.rd_gendisk, rd_dev.size);
 	
-	/* Add our disk to the system, it is not live */
+	/* Add our disk to the system, it is now live */
 	add_disk(rd_dev.rd_gendisk);
  
 	printk(KERN_INFO "%s: Ram Block driver initialised (%d sectors; %d bytes)\n",
