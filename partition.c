@@ -136,7 +136,6 @@ static int is_gpt_valid(gpt_header *h, gpt_entry *ent)
 
 	printk(KERN_INFO "ORIG=%du, CRC=%du \n", origcrc, crc);
 	if (crc != origcrc) {
-		
 		printk(KERN_ERR "INVALID HEADER CRC\n");
 		return rc;
 	}
@@ -198,7 +197,6 @@ static void write_primary_gpt_header(gpt_header *h) {
 	guid.time_low = ~0;
 	memset(&guid.node, ~0, sizeof(guid.node));
 	h->disk_guid = guid; 
-	
 }
 
 static void write_secondary_gpt_header(gpt_header *h) 
@@ -218,7 +216,6 @@ static void write_part_entries(gpt_entry *ents)
 	uuid_parse(GPT_DEFAULT_ENTRY_TYPE, &uuid);
 	uuid.b[0] = swab64(uuid.b[0]);
 	uuid.b[8] = swab64(uuid.b[8]); //TODO
-	
 	
 	memcpy(&e.type, &uuid, sizeof(uuid_t));
 	guid_gen(&guid);
