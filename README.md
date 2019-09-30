@@ -15,7 +15,7 @@ In Arch based systems this can be done by installing the meta-package and then s
 
 In Debian based systems this can be similiarly done with
 
-$sudo apt-get install linux-headers-$(uname -r)
+    $ sudo apt-get install linux-headers-$(uname -r)
 
 -- Compile the driver
 
@@ -78,11 +78,6 @@ Next we remove the device driver
     $ sudo rmmod dor
 
 Everything should be removed and the device driver should no longer be active. 
-
-# TODO
-- Make userspace-friendly ioctl commands to format the partitions or expand storage while the driver is loaded
-- Refactor some ugly code in the partition making section
-- Create support for specifiying partition/disk size at load time through device driver parameters
 
 # Info 
 This project was done mainly to learn about block device driver fundamentals and to learn about partitioning schemes.
